@@ -1,0 +1,44 @@
+{
+  "config_flow": {
+    "title": "Gruppo Hera",
+    "step": {
+      "user": {
+        "title": "Configure API Connection",
+        "data": {
+          "api_url": "API Service URL"
+        },
+        "description": "Enter the URL of your Gruppo Hera REST API service (e.g., http://host.docker.internal:3000)"
+      },
+      "auth": {
+        "title": "Authenticate",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        },
+        "description": "Enter your Gruppo Hera credentials. These will be stored securely in secrets.yaml."
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to API service",
+      "invalid_auth": "Invalid credentials",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Device is already configured"
+    }
+  },
+  "entity": {
+    "consumption_total": {
+      "name": "Total Consumption"
+    },
+    "consumption_f1": {
+      "name": "Peak Consumption (F1)"
+    },
+    "consumption_f2": {
+      "name": "Semi-Peak Consumption (F2)"
+    },
+    "consumption_f3": {
+      "name": "Off-Peak Consumption (F3)"
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "name": "Gruppo Hera",
+  "content_in_root": false,
+  "zip_release": false,
+  "filename": "gruppo_hera.zip",
+  "render_readme": true,
+  "homeassistant": "2024.1.0",
+  "persistent_directory": null,
+  "hacs": "1.34.0"
+}

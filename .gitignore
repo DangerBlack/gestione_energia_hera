@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+.dist/
+.venv/
+venv/
+ENV/
+
+# Node.js
+node_modules/
+
+# Session and token caches
+.session-cookies.json
+.token-cache.json
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Test data and exports
+*.har
+*.pdf
+*.xls
+*.xlsx
+
+# IDE and editors
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
