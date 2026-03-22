@@ -36,6 +36,14 @@ SENSOR_DESCRIPTIONS = [
         state_class="total_increasing",
     ),
     GruppoHeraSensorDescription(
+        key="consumption_f0",
+        name="Consumption F0",
+        native_unit_of_measurement="kWh",
+        device_class=SensorDeviceClass.ENERGY,
+        state_class="total_increasing",
+        band="F0",
+    ),
+    GruppoHeraSensorDescription(
         key="consumption_f1",
         name="Consumption F1",
         native_unit_of_measurement="kWh",
@@ -91,19 +99,19 @@ async def async_setup_entry(
         service_type = contract.get("serviceType", "UNKNOWN")
         address = contract.get("supplyAddress", "Unknown")
         
-        # Skip if no usage data available
+        # Get usage data for this contract
         usage_data = coordinator.data.get("usage", {}).get(contract_id, {})
-        if not usage_data:
-            continue
         
-        # Get latest usage record
-        usage_list = usage_data.get("data", {}).get("list", [])
+        # Get latest usage record - handle both API response formats
+        usage_list = usage_data.get("list", []) if usage_data else []
         if not usage_list:
-            continue
+            # Still create sensors even without usage data (will show unavailable)
+            _LOGGER.debug(f"No usage data for contract {contract_id}")
         
-        latest_usage = usage_list[0]
+        latest_usage = usage_list[0] if usage_list else None
         
         # Create total consumption sensor
+        total_value = latest_usage.get("totalUsage", 0) if latest_usage else 0
         sensors.append(
             GruppoHeraSensor(
                 coordinator,
@@ -111,20 +119,23 @@ async def async_setup_entry(
                 contract_id,
                 service_type,
                 address,
-                latest_usage.get("totalUsage", 0),
+                total_value,
             )
         )
         
-        # Create band sensors (F1, F2, F3)
-        reads = latest_usage.get("reads", [])
+        # Create band sensors (F0, F1, F2, F3) based on what's available
+        reads = latest_usage.get("reads", []) if latest_usage else []
         reads_by_band = {r.get("type"): r for r in reads}
         
-        for band in ["F1", "F2", "F3"]:
+        # Create sensors for each band that exists in the data
+        for band in ["F0", "F1", "F2", "F3"]:
             if band in reads_by_band:
+                # Find the correct sensor description for this band
+                desc_index = {"F0": 1, "F1": 2, "F2": 3, "F3": 4}[band]
                 sensors.append(
                     GruppoHeraSensor(
                         coordinator,
-                        SENSOR_DESCRIPTIONS[1],  # Will be customized below
+                        SENSOR_DESCRIPTIONS[desc_index],
                         contract_id,
                         service_type,
                         address,
@@ -134,14 +145,15 @@ async def async_setup_entry(
                 )
         
         # Create average daily sensor
+        avg_value = latest_usage.get("averageUsage", 0) if latest_usage else 0
         sensors.append(
             GruppoHeraSensor(
                 coordinator,
-                SENSOR_DESCRIPTIONS[4],
+                SENSOR_DESCRIPTIONS[5],
                 contract_id,
                 service_type,
                 address,
-                latest_usage.get("averageUsage", 0),
+                avg_value,
             )
         )
     
@@ -152,7 +164,7 @@ async def async_setup_entry(
         sensors.append(
             GruppoHeraSensor(
                 coordinator,
-                SENSOR_DESCRIPTIONS[5],
+                SENSOR_DESCRIPTIONS[6],
                 None,
                 "BILLS",
                 "All Bills",
@@ -210,7 +222,8 @@ class GruppoHeraSensor(CoordinatorEntity, SensorEntity):
         # Get latest usage data
         if self.contract_id:
             usage_data = self.coordinator.data.get("usage", {}).get(self.contract_id, {})
-            usage_list = usage_data.get("data", {}).get("list", [])
+            # Handle API response format: {list: [...]}
+            usage_list = usage_data.get("list", []) if usage_data else []
             
             if usage_list:
                 latest_usage = usage_list[0]

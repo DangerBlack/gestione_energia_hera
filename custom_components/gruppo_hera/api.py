@@ -169,7 +169,7 @@ async def get_usage(contract_id: str, page_number: int = 0, page_size: int = 10)
         raise Exception("Not authenticated. Please login first.")
     
     profile_id = await get_profile_id()
-    url = f"{SERVIZIONLINE_BASE}/profile/{profile_id}/contract/{contract_id}/usage?pageNumber={page_number}&pageSize={page_size}"
+    url = f"{SERVIZIONLINE_BASE}/api/profile/{profile_id}/contract/{contract_id}/usage?pageNumber={page_number}&pageSize={page_size}"
     
     full_cookie = f"{cookie_header}; profile={profile_id}"
     
