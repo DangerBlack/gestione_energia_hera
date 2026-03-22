@@ -45,33 +45,36 @@ class GruppoHeraConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Test authentication
             try:
                 # Try to login with provided credentials
-                await login(self.email, self.password)
+                _LOGGER.debug("Attempting login for: %s", self.email)
+                cookies = await login(self.email, self.password)
                 
                 # Check if we got a valid session
-                from .auth import load_cookies
-                cookies = load_cookies()
+                _LOGGER.debug("Login returned cookies: %s", list(cookies.keys()) if cookies else None)
                 
                 if cookies and (cookies.get('profile') or any(
                     k.startswith('x-ms-cpim-sso') for k in cookies.keys()
                 )):
-                    _LOGGER.info("Authentication successful")
+                    _LOGGER.info("Authentication successful for: %s", self.email)
                     
-                    # Clear the test cookies
+                    # Clear the test cookies - they will be re-created during actual use
                     from .auth import clear_cookies
+                    clear_cookies()
                     
-                    # Create config entry with secret references
+                    # Store credentials directly (not as secret references)
+                    # Home Assistant will encrypt them in the config entry
                     return self.async_create_entry(
                         title="Gruppo Hera",
                         data={
-                            CONF_EMAIL: f"!secret {DOMAIN}_email",
-                            CONF_PASSWORD: f"!secret {DOMAIN}_password",
+                            CONF_EMAIL: self.email,
+                            CONF_PASSWORD: self.password,
                         },
                     )
                 else:
+                    _LOGGER.error("Authentication failed: no session cookies received")
                     errors["base"] = "invalid_auth"
                     
             except Exception as err:
-                _LOGGER.error("Auth error: %s", err)
+                _LOGGER.error("Auth error: %s - %s", type(err).__name__, str(err))
                 errors["base"] = "invalid_auth"
 
         return self.async_show_form(
@@ -81,7 +84,7 @@ class GruppoHeraConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     @staticmethod
-    async def async_get_options_flow(
+    def async_get_options_flow(
         config_entry: config_entries.ConfigEntry,
     ) -> config_entries.OptionsFlow:
         """Create the options flow."""

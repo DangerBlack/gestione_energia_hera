@@ -1,21 +1,23 @@
 """
 Gruppo Hera Authentication Module
-Ported from Node.js auth.js - Pure Python, no external dependencies
+Ported from Node.js auth.js - Pure Python
+
+Note: Uses 'requests' library for authentication (more reliable than aiohttp for this specific OAuth flow)
+      and 'aiohttp' for API calls (Home Assistant built-in).
 """
 import asyncio
 import base64
 import hashlib
 import json
-import os
 import random
 import string
 from pathlib import Path
 from typing import Dict, Optional
 
 try:
-    import aiohttp
+    import requests
 except ImportError:
-    raise ImportError("aiohttp is required: pip install aiohttp")
+    raise ImportError("requests is required: pip install requests")
 
 
 COOKIE_FILE = Path(__file__).parent / ".session-cookies.json"
@@ -34,19 +36,32 @@ def generate_random_string(length: int) -> str:
 
 
 def extract_cookies(set_cookie_header: Optional[str]) -> Dict[str, str]:
-    """Extract cookies from Set-Cookie header."""
+    """Extract cookies from Set-Cookie header using regex."""
+    import re
     if not set_cookie_header:
         return {}
     
     cookies = {}
-    cookie_strings = set_cookie_header.split(', ')
     
-    for cookie_str in cookie_strings:
-        eq_idx = cookie_str.find('=')
-        if eq_idx > 0:
-            name = cookie_str[:eq_idx]
-            val = cookie_str[eq_idx + 1:].split(';')[0]
-            cookies[name] = val
+    # Define patterns with explicit cookie names
+    patterns = {
+        'x-ms-cpim-csrf': r'x-ms-cpim-csrf=([^;]+)',
+        'x-ms-cpim-trans': r'x-ms-cpim-trans=([^;]+)',
+        'profile': r'profile=([^;]+)',
+        'session': r'session=([^;]+)',
+        'accessToken': r'accessToken=([^;]+)',
+    }
+    
+    # Handle x-ms-cpim-cache separately (has variable name)
+    cache_match = re.search(r'(x-ms-cpim-cache[^=]+)=([^;]+)', set_cookie_header)
+    if cache_match:
+        cookies[cache_match.group(1)] = cache_match.group(2)
+    
+    # Extract other cookies
+    for cookie_name, pattern in patterns.items():
+        match = re.search(pattern, set_cookie_header)
+        if match:
+            cookies[cookie_name] = match.group(1)
     
     return cookies
 
@@ -99,26 +114,25 @@ def is_authenticated() -> bool:
     )
 
 
-async def authenticate_with_b2c(email: str, password: str) -> Dict:
+def _authenticate_sync(email: str, password: str) -> Dict:
     """
+    Synchronous authentication using requests library.
     Full Azure AD B2C OAuth flow with cookies.
     Returns session cookies.
     """
+    from urllib.parse import urlencode, quote, parse_qs
+    
     # Generate PKCE parameters
     code_verifier = generate_random_string(43)
     code_challenge = base64.urlsafe_b64encode(
         hashlib.sha256(code_verifier.encode()).digest()
     ).decode().rstrip('=')
     
-    state = generate_random_string(32)
     nonce = generate_random_string(32)
     client_request_id = generate_random_string(36)
     
-    # Build authorize URL
-    from urllib.parse import urlencode
-    
     scope = 'openid offline_access https://myheraapp.onmicrosoft.com/40c94bb1-2d83-4ccc-8c72-fde8ad15ed24/read profile'
-    state_value = json.dumps({'id': generate_random_string(32), 'meta': {'interactionType': 'redirect'}})
+    state_value = json.dumps({'id': generate_random_string(32), 'meta': {'interactionType': 'redirect'}}, separators=(',', ':'))
     
     authorize_url = f"{AUTHORITY}/oauth2/v2.0/authorize?{urlencode({
         'client_id': CLIENT_ID,
@@ -135,242 +149,222 @@ async def authenticate_with_b2c(email: str, password: str) -> Dict:
         'env': 'prod'
     })}"
     
+    # Create session - requests.Session() automatically manages cookies
+    session = requests.Session()
+    
     # Step 1: Get initial session
     print("Step 1: Getting initial session...")
-    async with aiohttp.ClientSession() as session:
-        async with session.get(
-            authorize_url,
-            headers={
-                'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0',
-                'Accept': 'text/html,application/xhtml+xml',
-                'Accept-Language': 'en-US,en;q=0.5',
-            },
-            allow_redirects=False
-        ) as resp:
-            cookies = extract_cookies(resp.headers.get('set-cookie', ''))
-            
-            if 'x-ms-cpim-csrf' not in cookies:
-                raise Exception("Failed to get CSRF token from initial session")
-            
-            # Extract TID from x-ms-cpim-trans cookie
-            trans_cookie = cookies.get('x-ms-cpim-trans', '')
-            tid = None
-            
-            if trans_cookie:
-                try:
-                    padded = trans_cookie + '=' * (4 - len(trans_cookie) % 4)
-                    json_data = base64.b64decode(padded).decode()
-                    data = json.loads(json_data)
-                    tid = data.get('T_DIC', [{}])[0].get('I') or data.get('C_ID')
-                except Exception as e:
-                    print(f"Warning: Could not extract TID: {e}")
-            
-            if not tid:
-                tid = generate_random_string(36)
-                print(f"  Generated TID: {tid}")
-            else:
-                print(f"  Got TID: {tid}")
-            
-            print("  Got CSRF token")
-            
-            # Step 2: Submit credentials
-            csrf_token = cookies['x-ms-cpim-csrf']
-            tx_state = base64.b64encode(json.dumps({'TID': tid}).encode()).decode()
-            
-            self_asserted_url = f"{AUTHORITY}/SelfAsserted?tx=StateProperties={tx_state}&p=B2C_1A_SignIn_Web"
-            
-            print("Step 2: Submitting credentials...")
-            async with session.post(
-                self_asserted_url,
-                headers={
-                    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0',
-                    'Accept': 'application/json, text/javascript, */*; q=0.01',
-                    'Accept-Language': 'en-US,en;q=0.9,it;q=0.8',
-                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                    'X-CSRF-TOKEN': csrf_token,
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'Origin': 'https://login.gruppohera.it',
-                    'Referer': authorize_url,
-                    'Cookie': build_cookie_header(cookies),
-                },
-                data={
-                    'request_type': 'RESPONSE',
-                    'signInName': email,
-                    'password': password
-                }
-            ) as cred_resp:
-                if not cred_resp.ok:
-                    error_text = await cred_resp.text()
-                    raise Exception(f"Authentication failed: {error_text}")
-                
-                cred_data = await cred_resp.json()
-                
-                if cred_data.get('status') == '400' or cred_data.get('errors'):
-                    raise Exception(f"Invalid credentials: {cred_data}")
-                
-                # Update cookies
-                cred_cookies = extract_cookies(cred_resp.headers.get('set-cookie', ''))
-                cookies.update(cred_cookies)
-                
-                print("  Credentials accepted")
-            
-            # Step 3: Get redirect
-            print("Step 3: Getting redirect...")
-            
-            # Use wall clock time (like Node.js Date.now() / 1000), not monotonic time
-            import time
-            base_time = int(time.time())
-            page_view_id = generate_random_string(36)
-            
-            # Build diags parameter with trace data (from HAR analysis)
-            diags = {
-                "pageViewId": page_view_id,
-                "pageId": "CombinedSigninAndSignup",
-                "trace": [
-                    {"ac": "T005", "acST": base_time, "acD": 1},
-                    {"ac": f"T021 - URL:{AUTHORITY}/b2c/login_sol.html", "acST": base_time, "acD": 500},
-                    {"ac": "T019", "acST": base_time + 1, "acD": 3},
-                    {"ac": "T004", "acST": base_time + 1, "acD": 2},
-                    {"ac": "T003", "acST": base_time + 1, "acD": 2},
-                    {"ac": "T035", "acST": base_time + 1, "acD": 0},
-                    {"ac": "T030Online", "acST": base_time + 1, "acD": 0},
-                    {"ac": "T002", "acST": base_time + 17, "acD": 0},
-                    {"ac": "T018T010", "acST": base_time + 16, "acD": 1040}
-                ]
-            }
-            from urllib.parse import quote
-            diags_param = quote(json.dumps(diags))
-            
-            # Build exact Referer from the authorize request (with all original params)
-            from urllib.parse import urlencode
-            scope = 'openid offline_access https://myheraapp.onmicrosoft.com/40c94bb1-2d83-4ccc-8c72-fde8ad15ed24/read profile'
-            state_value = json.dumps({'id': generate_random_string(32), 'meta': {'interactionType': 'redirect'}})
-            authorize_referer = f"{AUTHORITY.lower()}/oauth2/v2.0/authorize?{urlencode({
-                'client_id': CLIENT_ID,
-                'scope': scope,
-                'redirect_uri': 'https://servizionline.gruppohera.it/auth/hera/login',
-                'response_type': 'code',
-                'response_mode': 'fragment',
-                'state': state_value,
-                'nonce': nonce,
-                'client-request-id': client_request_id,
-                'code_challenge': code_challenge,
-                'code_challenge_method': 'S256',
-                'referrer': 'hera',
-                'env': 'prod'
-            })}"
-            
-            combined_url = f"{AUTHORITY}/api/CombinedSigninAndSignup/confirmed?rememberMe=false&csrf_token={quote(csrf_token)}&tx=StateProperties={tx_state}&p=B2C_1A_SignIn_Web"
-            
-            async with session.get(
-                combined_url,
-                headers={
-                    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0',
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    'Accept-Language': 'en-US,en;q=0.9,it;q=0.8',
-                    'Cookie': build_cookie_header(cookies),
-                    'Referer': authorize_referer,
-                    'DNT': '1',
-                    'Upgrade-Insecure-Requests': '1',
-                    'Sec-Fetch-Dest': 'document',
-                    'Sec-Fetch-Mode': 'navigate',
-                    'Sec-Fetch-Site': 'same-origin',
-                    'Sec-Fetch-User': '?1',
-                    'Pragma': 'no-cache',
-                    'Cache-Control': 'no-cache',
-                },
-                allow_redirects=False
-            ) as combined_resp:
-                if combined_resp.status != 302:
-                    body = await combined_resp.text()
-                    raise Exception(f"Expected 302 redirect, got {combined_resp.status}")
-                
-                location = combined_resp.headers.get('location')
-                if not location:
-                    raise Exception("No redirect location from CombinedSigninAndSignup")
-                
-                print(f"  Got redirect location: {location[:100]}...")
-                
-                # Update cookies
-                combined_cookies = extract_cookies(combined_resp.headers.get('set-cookie', ''))
-                cookies.update(combined_cookies)
-            
-            # Step 4: Exchange code for token
-            print("Step 3: Exchanging code for token...")
-            
-            hash_idx = location.find('#')
-            if hash_idx == -1:
-                raise Exception("No hash fragment in redirect URL")
-            
-            code_fragment = location[hash_idx + 1:]
-            from urllib.parse import parse_qs
-            params = parse_qs(code_fragment)
-            code = params.get('code', [None])[0]
-            
-            if not code:
-                raise Exception("No code in redirect URL fragment")
-            
-            callback_url = location[:hash_idx]
-            
-            async with session.post(
-                f"{AUTHORITY}/oauth2/v2.0/token",
-                headers={
-                    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0',
-                    'Accept': 'application/json',
-                    'Content-Type': 'application/x-www-form-urlencoded',
-                    'Cookie': build_cookie_header(cookies),
-                    'x-client-SKU': 'msal.js.browser',
-                    'x-client-VER': '2.35.0',
-                },
-                data={
-                    'client_id': CLIENT_ID,
-                    'redirect_uri': 'https://servizionline.gruppohera.it/auth/hera/login',
-                    'scope': scope,
-                    'code': code,
-                    'grant_type': 'authorization_code',
-                    'code_verifier': code_verifier,
-                    'client_info': '1',
-                }
-            ) as token_resp:
-                if not token_resp.ok:
-                    error_text = await token_resp.text()
-                    raise Exception(f"Token exchange failed: {error_text}")
-                
-                token_data = await token_resp.json()
-                print("  Got access token")
-                
-                cookies['accessToken'] = token_data['access_token']
-                
-                # Update cookies from token response
-                token_cookies = extract_cookies(token_resp.headers.get('set-cookie', ''))
-                cookies.update(token_cookies)
-            
-            # Step 5: Establish session with servizionline
-            print("Step 4: Establishing session with servizionline...")
-            
-            async with session.get(
-                callback_url,
-                headers={
-                    'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0',
-                    'Accept': 'text/html,application/xhtml+xml',
-                    'Cookie': build_cookie_header(cookies),
-                    'Referer': 'https://servizionline.gruppohera.it/',
-                },
-                allow_redirects=True
-            ) as callback_resp:
-                final_cookies = extract_cookies(callback_resp.headers.get('set-cookie', ''))
-                cookies.update(final_cookies)
-                
-                print(f"  Response URL: {callback_resp.url}")
-                print(f"  Cookies received: {list(cookies.keys())}")
-                
-                has_session = cookies.get('profile') or any(k.startswith('x-ms-cpim-sso') for k in cookies.keys())
-                
-                if not has_session:
-                    raise Exception("No session cookie received - authentication failed")
-                
-                print("  Session established!")
+    resp = session.get(
+        authorize_url,
+        headers={
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Accept-Language': 'en-US,en;q=0.5',
+        },
+        allow_redirects=False
+    )
     
+    # Extract cookies from session
+    cookies = {cookie.name: cookie.value for cookie in session.cookies}
+    
+    if 'x-ms-cpim-csrf' not in cookies:
+        raise Exception("Failed to get CSRF token from initial session")
+    
+    # Extract TID from x-ms-cpim-trans cookie
+    trans_cookie = cookies.get('x-ms-cpim-trans', '')
+    tid = None
+    
+    if trans_cookie:
+        try:
+            padded = trans_cookie + '=' * (4 - len(trans_cookie) % 4)
+            json_data = base64.b64decode(padded).decode()
+            data = json.loads(json_data)
+            tid = data.get('T_DIC', [{}])[0].get('I') or data.get('C_ID')
+        except Exception as e:
+            print(f"Warning: Could not extract TID: {e}")
+    
+    if not tid:
+        tid = generate_random_string(36)
+        print(f"  Generated TID: {tid}")
+    else:
+        print(f"  Got TID: {tid}")
+    
+    print("  Got CSRF token")
+    
+    # Step 2: Submit credentials (Session automatically sends cookies)
+    csrf_token = cookies['x-ms-cpim-csrf']
+    tx_state = base64.b64encode(json.dumps({'TID': tid}, separators=(',', ':')).encode()).decode()
+    
+    self_asserted_url = f"{AUTHORITY}/SelfAsserted?tx=StateProperties={tx_state}&p=B2C_1A_SignIn_Web"
+    
+    print("Step 2: Submitting credentials...")
+    
+    resp = session.post(
+        self_asserted_url,
+        headers={
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0',
+            'Accept': 'application/json, text/javascript, */*; q=0.01',
+            'Accept-Language': 'en-US,en;q=0.9,it;q=0.8',
+            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+            'X-CSRF-TOKEN': csrf_token,
+            'X-Requested-With': 'XMLHttpRequest',
+            'Origin': 'https://login.gruppohera.it',
+            'Referer': authorize_url,
+            # NO Cookie header - let Session manage it!
+        },
+        data={
+            'request_type': 'RESPONSE',
+            'signInName': email,
+            'password': password
+        }
+    )
+    
+    if not resp.ok:
+        raise Exception(f"Authentication failed: {resp.text} (status: {resp.status_code})")
+    
+    cred_data = resp.json()
+    
+    if cred_data.get('status') == '400' or cred_data.get('errors'):
+        raise Exception(f"Invalid credentials: {cred_data}")
+    
+    print("  Credentials accepted")
+    
+    # Step 3: Get redirect
+    print("Step 3: Getting redirect...")
+    
+    # Build exact Referer from the authorize request
+    authorize_referer = f"{AUTHORITY.lower()}/oauth2/v2.0/authorize?{urlencode({
+        'client_id': CLIENT_ID,
+        'scope': scope,
+        'redirect_uri': 'https://servizionline.gruppohera.it/auth/hera/login',
+        'response_type': 'code',
+        'response_mode': 'fragment',
+        'state': json.dumps({'id': generate_random_string(32), 'meta': {'interactionType': 'redirect'}}),
+        'nonce': nonce,
+        'client-request-id': client_request_id,
+        'code_challenge': code_challenge,
+        'code_challenge_method': 'S256',
+        'referrer': 'hera',
+        'env': 'prod'
+    })}"
+    
+    combined_url = f"{AUTHORITY}/api/CombinedSigninAndSignup/confirmed?rememberMe=false&csrf_token={quote(csrf_token)}&tx=StateProperties={tx_state}&p=B2C_1A_SignIn_Web"
+    
+    resp = session.get(
+        combined_url,
+        headers={
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9,it;q=0.8',
+            'Referer': authorize_referer,
+            'DNT': '1',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'same-origin',
+            'Sec-Fetch-User': '?1',
+            'Pragma': 'no-cache',
+            'Cache-Control': 'no-cache',
+        },
+        allow_redirects=False
+    )
+    
+    if resp.status_code != 302:
+        body = resp.text
+        raise Exception(f"Expected 302 redirect, got {resp.status_code}: {body[:200]}")
+    
+    location = resp.headers.get('location')
+    if not location:
+        raise Exception("No redirect location from CombinedSigninAndSignup")
+    
+    print(f"  Got redirect location")
+    
+    # Step 4: Exchange code for token
+    print("Step 3: Exchanging code for token...")
+    
+    hash_idx = location.find('#')
+    if hash_idx == -1:
+        raise Exception("No hash fragment in redirect URL")
+    
+    code_fragment = location[hash_idx + 1:]
+    params = parse_qs(code_fragment)
+    code = params.get('code', [None])[0]
+    
+    if not code:
+        raise Exception(f"No code in redirect URL fragment. Fragment: {code_fragment[:200]}")
+    
+    callback_url = location[:hash_idx]
+    
+    resp = session.post(
+        f"{AUTHORITY}/oauth2/v2.0/token",
+        headers={
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0',
+            'Accept': 'application/json',
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Cookie': build_cookie_header(cookies),
+            'x-client-SKU': 'msal.js.browser',
+            'x-client-VER': '2.35.0',
+        },
+        data={
+            'client_id': CLIENT_ID,
+            'redirect_uri': 'https://servizionline.gruppohera.it/auth/hera/login',
+            'scope': scope,
+            'code': code,
+            'grant_type': 'authorization_code',
+            'code_verifier': code_verifier,
+            'client_info': '1',
+        }
+    )
+    
+    if not resp.ok:
+        error_text = resp.text
+        raise Exception(f"Token exchange failed: {error_text}")
+    
+    token_data = resp.json()
+    print("  Got access token")
+    
+    cookies['accessToken'] = token_data['access_token']
+    
+    # Step 5: Establish session with servizionline
+    print("Step 4: Establishing session with servizionline...")
+    
+    resp = session.get(
+        callback_url,
+        headers={
+            'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/115.0',
+            'Accept': 'text/html,application/xhtml+xml',
+            'Referer': 'https://servizionline.gruppohera.it/',
+            # NO Cookie header - let Session manage it!
+        },
+        allow_redirects=True
+    )
+    
+    # Update cookies from session (preserve accessToken)
+    session_cookies = {cookie.name: cookie.value for cookie in session.cookies}
+    cookies.update(session_cookies)
+    
+    print(f"  Response URL: {resp.url}")
+    print(f"  Cookies received: {list(cookies.keys())}")
+    
+    has_session = cookies.get('profile') or any(k.startswith('x-ms-cpim-sso') for k in cookies.keys())
+    
+    if not has_session:
+        raise Exception("No session cookie received - authentication failed")
+    
+    print("  Session established!")
+    
+    return cookies
+
+
+async def authenticate_with_b2c(email: str, password: str) -> Dict:
+    """
+    Full Azure AD B2C OAuth flow with cookies.
+    Runs synchronous requests in a thread pool to avoid blocking.
+    Returns session cookies.
+    """
+    # Run synchronous requests in thread pool
+    loop = asyncio.get_event_loop()
+    cookies = await loop.run_in_executor(None, _authenticate_sync, email, password)
     return cookies
 
 

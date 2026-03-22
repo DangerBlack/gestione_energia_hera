@@ -21,7 +21,7 @@ from .api import get_contracts, get_bills, get_usage
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS = ["sensor", "binary_sensor"]
+PLATFORMS = ["sensor"]
 
 
 async def async_setup(hass: HomeAssistant, config: dict) -> bool:
@@ -84,9 +84,9 @@ class GruppoHeraDataUpdateCoordinator(DataUpdateCoordinator):
             # Ensure we're authenticated (will auto-login if needed)
             await self._async_ensure_authenticated()
             
-            # Fetch all data in parallel
+            # Fetch all data in parallel using executor for sync calls
             contracts, bills = await self.hass.async_add_executor_job(
-                self._fetch_contracts_and_bills
+                self._fetch_contracts_and_bills_sync
             )
             
             # Fetch usage for each contract
@@ -96,7 +96,7 @@ class GruppoHeraDataUpdateCoordinator(DataUpdateCoordinator):
                 if contract_id:
                     try:
                         usage = await self.hass.async_add_executor_job(
-                            self._fetch_usage, contract_id
+                            self._fetch_usage_sync, contract_id
                         )
                         usage_data[contract_id] = usage
                     except Exception as err:
@@ -114,8 +114,14 @@ class GruppoHeraDataUpdateCoordinator(DataUpdateCoordinator):
                 raise ConfigEntryAuthFailed(f"Authentication failed: {err}")
             raise UpdateFailed(f"Data fetch error: {err}")
 
-    def _fetch_contracts_and_bills(self):
-        """Fetch contracts and bills synchronously."""
+    def _fetch_contracts_and_bills_sync(self):
+        """Fetch contracts and bills using the sync API wrapper."""
+        # Import here to avoid circular imports
+        from .api import get_contracts, get_bills
+        
+        # These are async functions, so we need to run them
+        # Since we're in an executor, we can't use async/await directly
+        # Instead, we use the sync wrappers or run in a new loop
         import asyncio
         
         async def fetch():
@@ -123,21 +129,24 @@ class GruppoHeraDataUpdateCoordinator(DataUpdateCoordinator):
             bills = await get_bills()
             return contracts, bills
         
-        # Run the async fetch
         loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
             return loop.run_until_complete(fetch())
         finally:
             loop.close()
 
-    def _fetch_usage(self, contract_id: str):
-        """Fetch usage for a specific contract synchronously."""
+    def _fetch_usage_sync(self, contract_id: str):
+        """Fetch usage for a specific contract."""
+        from .api import get_usage
+        
         import asyncio
         
         async def fetch():
             return await get_usage(contract_id, page_number=0, page_size=10)
         
         loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
             return loop.run_until_complete(fetch())
         finally:

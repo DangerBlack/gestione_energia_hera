@@ -11,12 +11,11 @@ try:
 except ImportError:
     raise ImportError("aiohttp is required: pip install aiohttp")
 
-from .auth import (
-    get_cookie_header,
-    load_cookies,
-    API_BASE,
-    SERVIZIONLINE_BASE
-)
+from .auth import get_cookie_header, load_cookies
+
+# API Base URLs (matching Node.js api.js)
+API_BASE = 'https://myhera.gruppohera.it'
+SERVIZIONLINE_BASE = 'https://servizionline.gruppohera.it'
 
 
 async def get_profile_id() -> str:
@@ -43,7 +42,7 @@ async def get_profile_id() -> str:
     # Fetch from API as fallback
     async with aiohttp.ClientSession() as session:
         async with session.get(
-            f"{API_BASE}/profile/list",
+            f"{API_BASE}/api/mw/v1/profile/list",
             headers={
                 'Cookie': cookie_header,
                 'Authorization': auth_header,
@@ -77,7 +76,7 @@ async def get_bills() -> List[Dict]:
     
     async with aiohttp.ClientSession() as session:
         async with session.get(
-            f"{API_BASE}/profile/{profile_id}/bill/list",
+            f"{API_BASE}/api/mw/v1/profile/{profile_id}/bill/list",
             headers={
                 'Cookie': cookie_header,
                 'Authorization': auth_header,
@@ -143,7 +142,7 @@ async def get_contracts() -> List[Dict]:
     
     async with aiohttp.ClientSession() as session:
         async with session.get(
-            f"{API_BASE}/profile/{profile_id}/contract/list",
+            f"{API_BASE}/api/mw/v1/profile/{profile_id}/contract/list",
             headers={
                 'Cookie': cookie_header,
                 'Authorization': auth_header,
