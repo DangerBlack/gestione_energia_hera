@@ -1,11 +1,11 @@
 {
   "domain": "gruppo_hera",
-  "name": "Gruppo Hera",
+  "name": "Gestione Energia Hera",
   "version": "1.0.0",
-  "documentation": "https://github.com/yourusername/gruppo_hera",
-  "issue_tracker": "https://github.com/yourusername/gruppo_hera/issues",
+  "documentation": "https://github.com/DangerBlack/gruppo_hera",
+  "issue_tracker": "https://github.com/DangerBlack/gruppo_hera/issues",
   "dependencies": [],
-  "codeowners": ["@yourusername"],
+  "codeowners": ["@DangerBlack"],
   "config_flow": true,
   "requirements": ["requests>=2.31.0"]
 }

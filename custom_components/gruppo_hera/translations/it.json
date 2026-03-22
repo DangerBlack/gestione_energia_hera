@@ -1,0 +1,53 @@
+{
+  "config_flow": {
+    "title": "Gestione Energia Hera",
+    "step": {
+      "user": {
+        "title": "Configura Connessione API",
+        "data": {
+          "api_url": "URL Servizio API"
+        },
+        "description": "Inserisci l'URL del servizio API REST di Gruppo Hera (es. http://host.docker.internal:3000)"
+      },
+      "auth": {
+        "title": "Autenticazione",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        },
+        "description": "Inserisci le tue credenziali Gruppo Hera. Verranno salvate in modo sicuro in secrets.yaml."
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossibile connettersi all'API",
+      "invalid_auth": "Credenziali non valide",
+      "unknown": "Errore imprevisto"
+    },
+    "abort": {
+      "already_configured": "Dispositivo già configurato"
+    }
+  },
+  "entity": {
+    "consumption_total": {
+      "name": "Consumo Totale"
+    },
+    "consumption_f0": {
+      "name": "Consumo F0"
+    },
+    "consumption_f1": {
+      "name": "Consumo F1 (Picco)"
+    },
+    "consumption_f2": {
+      "name": "Consumo F2 (Semipicco)"
+    },
+    "consumption_f3": {
+      "name": "Consumo F3 (Fuori picco)"
+    },
+    "average_daily": {
+      "name": "Consumo Medio Giornaliero"
+    },
+    "last_bill_amount": {
+      "name": "Importo Ultima Bolletta"
+    }
+  }
+}

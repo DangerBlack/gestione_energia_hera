@@ -1,7 +1,8 @@
-"""Constants for Gruppo Hera integration."""
+"""Constants for Gestione Energia Hera integration."""
 
 DOMAIN = "gruppo_hera"
-MANUFACTURER = "Gruppo Hera"
+MANUFACTURER = "DangerBlack"
+INTEGRATION_NAME = "Gestione Energia Hera"
 
 # Configuration keys
 CONF_EMAIL = "email"

@@ -1,6 +1,6 @@
 {
   "config_flow": {
-    "title": "Gruppo Hera",
+    "title": "Gestione Energia Hera",
     "step": {
       "user": {
         "title": "Configure API Connection",
@@ -19,7 +19,7 @@
       }
     },
     "error": {
-      "cannot_connect": "Failed to connect to API service",
+      "cannot_connect": "Failed to connect to API",
       "invalid_auth": "Invalid credentials",
       "unknown": "Unexpected error"
     },
@@ -31,6 +31,9 @@
     "consumption_total": {
       "name": "Total Consumption"
     },
+    "consumption_f0": {
+      "name": "Consumption F0"
+    },
     "consumption_f1": {
       "name": "Peak Consumption (F1)"
     },
@@ -39,6 +42,12 @@
     },
     "consumption_f3": {
       "name": "Off-Peak Consumption (F3)"
+    },
+    "average_daily": {
+      "name": "Average Daily Consumption"
+    },
+    "last_bill_amount": {
+      "name": "Last Bill Amount"
     }
   }
 }
