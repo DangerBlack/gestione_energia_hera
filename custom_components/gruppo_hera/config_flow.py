@@ -95,7 +95,7 @@ class GruppoHeraOptionsFlowHandler(config_entries.OptionsFlow):
     """Handle options flow."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry):
-        self.config_entry = config_entry
+        self._config_entry = config_entry
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -110,7 +110,7 @@ class GruppoHeraOptionsFlowHandler(config_entries.OptionsFlow):
                 {
                     vol.Optional(
                         "scan_interval",
-                        default=self.config_entry.options.get("scan_interval", 21600),
+                        default=self._config_entry.options.get("scan_interval", 86400),
                     ): vol.All(vol.Coerce(int), vol.Range(min=300, max=86400)),
                 }
             ),

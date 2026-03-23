@@ -19,6 +19,9 @@ try:
 except ImportError:
     raise ImportError("requests is required: pip install requests")
 
+import logging
+
+_LOGGER = logging.getLogger(__name__)
 
 COOKIE_FILE = Path(__file__).parent / ".session-cookies.json"
 
@@ -73,17 +76,35 @@ def build_cookie_header(cookies: Dict[str, str]) -> str:
 
 def load_cookies() -> Optional[Dict]:
     """Load session cookies from cache."""
+    import asyncio
+    
+    # Run blocking I/O in executor to avoid blocking event loop
+    loop = asyncio.get_event_loop()
+    return loop.run_in_executor(None, _load_cookies_sync)
+
+
+def _load_cookies_sync() -> Optional[Dict]:
+    """Synchronous version of load_cookies for executor."""
     try:
         if COOKIE_FILE.exists():
             with open(COOKIE_FILE, 'r') as f:
                 return json.load(f)
     except Exception as e:
-        print(f"Error loading cookies: {e}")
+        _LOGGER.error(f"Error loading cookies: {e}")
     return None
 
 
 def save_cookies(cookies: Dict):
     """Save session cookies to cache."""
+    import asyncio
+    
+    # Run blocking I/O in executor to avoid blocking event loop
+    loop = asyncio.get_event_loop()
+    loop.run_in_executor(None, _save_cookies_sync, cookies)
+
+
+def _save_cookies_sync(cookies: Dict):
+    """Synchronous version of save_cookies for executor."""
     with open(COOKIE_FILE, 'w') as f:
         json.dump(cookies, f, indent=2)
 
@@ -153,7 +174,7 @@ def _authenticate_sync(email: str, password: str) -> Dict:
     session = requests.Session()
     
     # Step 1: Get initial session
-    print("Step 1: Getting initial session...")
+    _LOGGER.info("Step 1: Getting initial session...")
     resp = session.get(
         authorize_url,
         headers={
@@ -181,15 +202,15 @@ def _authenticate_sync(email: str, password: str) -> Dict:
             data = json.loads(json_data)
             tid = data.get('T_DIC', [{}])[0].get('I') or data.get('C_ID')
         except Exception as e:
-            print(f"Warning: Could not extract TID: {e}")
-    
-    if not tid:
-        tid = generate_random_string(36)
-        print(f"  Generated TID: {tid}")
-    else:
-        print(f"  Got TID: {tid}")
-    
-    print("  Got CSRF token")
+            _LOGGER.warning(f"Could not extract TID: {e}")
+        
+        if not tid:
+            tid = generate_random_string(36)
+            _LOGGER.info(f"  Generated TID: {tid}")
+        else:
+            _LOGGER.info(f"  Got TID: {tid}")
+        
+        _LOGGER.info("  Got CSRF token")
     
     # Step 2: Submit credentials (Session automatically sends cookies)
     csrf_token = cookies['x-ms-cpim-csrf']
@@ -197,7 +218,7 @@ def _authenticate_sync(email: str, password: str) -> Dict:
     
     self_asserted_url = f"{AUTHORITY}/SelfAsserted?tx=StateProperties={tx_state}&p=B2C_1A_SignIn_Web"
     
-    print("Step 2: Submitting credentials...")
+    _LOGGER.info("Step 2: Submitting credentials...")
     
     resp = session.post(
         self_asserted_url,
@@ -227,10 +248,10 @@ def _authenticate_sync(email: str, password: str) -> Dict:
     if cred_data.get('status') == '400' or cred_data.get('errors'):
         raise Exception(f"Invalid credentials: {cred_data}")
     
-    print("  Credentials accepted")
+    _LOGGER.info("  Credentials accepted")
     
     # Step 3: Get redirect
-    print("Step 3: Getting redirect...")
+    _LOGGER.info("Step 3: Getting redirect...")
     
     # Build exact Referer from the authorize request
     authorize_referer = f"{AUTHORITY.lower()}/oauth2/v2.0/authorize?{urlencode({
@@ -277,10 +298,10 @@ def _authenticate_sync(email: str, password: str) -> Dict:
     if not location:
         raise Exception("No redirect location from CombinedSigninAndSignup")
     
-    print(f"  Got redirect location")
+    _LOGGER.info("  Got redirect location")
     
     # Step 4: Exchange code for token
-    print("Step 3: Exchanging code for token...")
+    _LOGGER.info("Step 3: Exchanging code for token...")
     
     hash_idx = location.find('#')
     if hash_idx == -1:
@@ -321,12 +342,12 @@ def _authenticate_sync(email: str, password: str) -> Dict:
         raise Exception(f"Token exchange failed: {error_text}")
     
     token_data = resp.json()
-    print("  Got access token")
+    _LOGGER.info("  Got access token")
     
     cookies['accessToken'] = token_data['access_token']
     
     # Step 5: Establish session with servizionline
-    print("Step 4: Establishing session with servizionline...")
+    _LOGGER.info("Step 4: Establishing session with servizionline...")
     
     resp = session.get(
         callback_url,
@@ -351,7 +372,7 @@ def _authenticate_sync(email: str, password: str) -> Dict:
     if not has_session:
         raise Exception("No session cookie received - authentication failed")
     
-    print("  Session established!")
+    _LOGGER.info("  Session established!")
     
     return cookies
 
@@ -392,7 +413,7 @@ async def login(email: str, password: str) -> Dict:
 async def logout():
     """Clear stored authentication session."""
     clear_cookies()
-    print("Logged out. Session cleared.")
+    _LOGGER.info("Logged out. Session cleared.")
 
 
 # Async wrapper for sync functions
