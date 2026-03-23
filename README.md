@@ -26,14 +26,15 @@ node hera-cli.js usage <contract-id>
 ---
 
 ### 2. **custom_components/gruppo_hera** - Home Assistant Integration
-A pure Python Home Assistant integration with auto-re-authentication.
+A pure Python Home Assistant integration with daily updates.
 
 **Features:**
 - Pure Python (no external service needed)
-- Auto-re-authentication when sessions expire
+- Daily data updates (24-hour interval)
 - Home Assistant ConfigFlow UI
 - Sensors for consumption data
 - HACS compatible
+- Full authentication before each update
 
 **See:** [custom_components/gruppo_hera/](custom_components/gruppo_hera/) for the integration
 
@@ -106,5 +107,6 @@ These are unofficial tools for Gruppo Hera Servizi Online. Not affiliated with o
 
 - Session cookies are cached in `.session-cookies.json`
 - Credentials should be stored securely (use secrets in Home Assistant)
-- Sessions expire after ~1 hour, but cached cookies allow re-authentication
+- Integration performs full authentication every 24 hours
 - Both implementations share the same authentication logic (Python version ported from JavaScript)
+- Data updates once daily (appropriate for bills/contracts that change monthly)

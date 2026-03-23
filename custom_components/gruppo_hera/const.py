@@ -10,7 +10,7 @@ CONF_PASSWORD = "password"
 CONF_CONTRACT_IDS = "contract_ids"
 
 # Default values
-DEFAULT_SCAN_INTERVAL = 21600  # 6 hours in seconds
+DEFAULT_SCAN_INTERVAL = 86400  # 1 day in seconds (data changes rarely)
 
 # Sensor types
 SENSOR_TYPES = {

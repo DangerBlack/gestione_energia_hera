@@ -5,14 +5,13 @@ A **pure Python** Home Assistant integration for Gruppo Hera Servizi Online that
 ## Features
 
 - ✅ **Pure Python** - No external service or Node.js required
-- ✅ **Auto-re-authentication** - Automatically refreshes expired sessions
 - ✅ **Azure AD B2C OAuth 2.0** - Full authentication flow with PKCE
-- ✅ **Automatic session caching** - Cookies and tokens cached locally
 - ✅ **Bills** - List and download PDF bills
 - ✅ **Contracts** - View electricity and gas contracts
 - ✅ **Consumption data** - Get usage with F1/F2/F3 time-of-use bands
 - ✅ **HACS compatible** - Easy installation via Home Assistant Community Store
 - ✅ **Single dependency** - Only requires `aiohttp` (built into Home Assistant)
+- ✅ **Daily updates** - Automatically refreshes data once per day
 
 ## Installation
 
@@ -87,10 +86,10 @@ gruppo_hera_password: your-password
 
 Once configured, the integration will:
 
-- Automatically authenticate with Gruppo Hera on startup
+- Authenticate with Gruppo Hera before each data fetch
 - Fetch contracts, bills, and consumption data
 - Create sensors for each contract's consumption
-- Auto-re-authenticate when sessions expire (every 6 hours by default)
+- Update data once per day (24 hours)
 
 ### Sensors Created
 
@@ -131,23 +130,26 @@ card_mod:
       points_per_hour: 1
 ```
 
-## Auto-Re-authentication
+## Update Schedule
 
-The integration automatically re-authenticates when:
-- Session expires (typically after ~1 hour)
-- Token is invalid
-- API returns 401 Unauthorized
+The integration updates data **once per day** (every 24 hours). This is appropriate because:
 
-**No manual intervention required!** The integration handles it automatically.
+- Bills change monthly (when new bills are issued)
+- Contracts rarely change (only when you switch plans)
+- Consumption data is updated periodically by Gruppo Hera
 
-### Re-authentication Interval
+You can manually trigger a refresh from the Home Assistant UI if needed.
 
-The default update interval is 6 hours (21600 seconds). You can customize this in the integration options:
+### Customizing Update Interval
+
+You can customize the update interval in the integration options:
 
 1. Settings → Devices & Services
-2. Click on Gruppo Hera integration
+2. Click on "Gestione Energia Hera" integration
 3. Click "Configure" or "Options"
-4. Adjust the scan interval
+4. Adjust the scan interval (in seconds)
+
+**Recommended:** Keep at 86400 (24 hours) for optimal performance.
 
 ## Troubleshooting
 
@@ -173,13 +175,14 @@ The default update interval is 6 hours (21600 seconds). You can customize this i
 
 ### Session Expired Errors
 
-**Symptoms:** Logs show "Session expired" or "Authentication failed"
+**Symptoms:** Logs show "Authentication failed" or sensors unavailable
 
 **Solutions:**
-1. The integration should auto-re-authenticate - check logs
-2. If re-auth fails, remove and re-add the integration
-3. Verify credentials haven't changed
-4. Check for any 2FA requirements on your Gruppo Hera account
+1. Check your credentials are correct
+2. Try logging in at https://servizionline.gruppohera.it to verify
+3. The integration performs a fresh login every 24 hours - wait for next update
+4. If still failing, remove and re-add the integration
+5. Verify credentials haven't changed
 
 ### Enable Debug Logging
 
@@ -249,9 +252,18 @@ gruppo_hera/
 
 The integration uses these Gruppo Hera APIs:
 
-- **Authentication:** `https://login.gruppohera.it`
+- **Authentication:** `https://login.gruppohera.it` (Azure AD B2C)
 - **Bills/Contracts:** `https://myhera.gruppohera.it/api/mw/v1`
 - **Usage:** `https://servizionline.gruppohera.it/api`
+
+## Authentication Approach
+
+The integration performs a **full authentication** before each data fetch (every 24 hours). This approach:
+
+- **Is more reliable** than trying to reuse expired sessions
+- **Avoids session expiry issues** (tokens expire after ~1 hour)
+- **Simplifies the code** (no complex session management)
+- **Matches data change frequency** (bills/contracts change rarely)
 
 ## Requirements
 
@@ -272,6 +284,7 @@ The integration uses these Gruppo Hera APIs:
 - Bills are read-only (cannot pay bills through this integration)
 - Usage data may have a delay (depends on Gruppo Hera data updates)
 - Only supports email/password authentication (no 2FA support yet)
+- Updates once per day (not real-time)
 
 ## Contributing
 

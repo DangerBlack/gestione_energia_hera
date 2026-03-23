@@ -371,15 +371,10 @@ async def authenticate_with_b2c(email: str, password: str) -> Dict:
 async def login(email: str, password: str) -> Dict:
     """
     Login with email/password - returns session cookies.
-    Uses cached session if available.
+    Always performs full authentication (no cached session reuse).
+    Session tokens expire after ~1 hour, so fresh login is more reliable.
     """
-    # Check for cached session
-    cached = load_cookies()
-    if cached and (cached.get('profile') or any(k.startswith('x-ms-cpim-sso') for k in cached.keys())):
-        print("Using cached session")
-        return cached
-    
-    # Perform login
+    # Always perform fresh login - cached sessions expire after ~1 hour
     cookies = await authenticate_with_b2c(email, password)
     
     # Check for session cookie
@@ -387,7 +382,7 @@ async def login(email: str, password: str) -> Dict:
     
     if has_session:
         save_cookies(cookies)
-        print("Login successful! Session cached.")
+        _LOGGER.debug("Login successful! Session cached.")
     else:
         raise Exception("Login failed - no session cookie received")
     

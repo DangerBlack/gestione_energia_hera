@@ -81,8 +81,11 @@ class GruppoHeraDataUpdateCoordinator(DataUpdateCoordinator):
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch data from Gruppo Hera API."""
         try:
-            # Ensure we're authenticated (will auto-login if needed)
-            await self._async_ensure_authenticated()
+            # Always perform fresh login (session expires after ~1 hour)
+            # This is more reliable than trying to reuse expired sessions
+            _LOGGER.info("Performing authentication...")
+            await login(self.email, self.password)
+            _LOGGER.info("Authentication successful")
             
             # Fetch all data in parallel using executor for sync calls
             contracts, bills = await self.hass.async_add_executor_job(
@@ -110,7 +113,7 @@ class GruppoHeraDataUpdateCoordinator(DataUpdateCoordinator):
             }
             
         except Exception as err:
-            if "Not authenticated" in str(err):
+            if "Not authenticated" in str(err) or "authentication" in str(err).lower():
                 raise ConfigEntryAuthFailed(f"Authentication failed: {err}")
             raise UpdateFailed(f"Data fetch error: {err}")
 
@@ -153,30 +156,7 @@ class GruppoHeraDataUpdateCoordinator(DataUpdateCoordinator):
             loop.close()
 
     async def _async_ensure_authenticated(self):
-        """Ensure we have a valid authentication session."""
-        cookies = load_cookies()
-        
-        # If no cached cookies, perform login
-        if not cookies:
-            _LOGGER.info("No cached session, performing login...")
-            try:
-                await login(self.email, self.password)
-                _LOGGER.info("Login successful")
-            except Exception as err:
-                raise UpdateFailed(f"Login failed: {err}")
-        
-        # Check if cookies are still valid (basic check)
-        # In a more sophisticated implementation, you could check token expiry
-        has_session = cookies.get('profile') if cookies else False
-        if not has_session and cookies:
-            has_session = any(
-                k.startswith('x-ms-cpim-sso') for k in cookies.keys()
-            )
-        
-        if not has_session:
-            _LOGGER.info("Session expired, re-authenticating...")
-            try:
-                await login(self.email, self.password)
-                _LOGGER.info("Re-authentication successful")
-            except Exception as err:
-                raise UpdateFailed(f"Re-authentication failed: {err}")
+        """Deprecated: Always perform fresh login instead."""
+        # This method is no longer used - we always do full login
+        # Session expires after ~1 hour, so reusing cached sessions is unreliable
+        pass
