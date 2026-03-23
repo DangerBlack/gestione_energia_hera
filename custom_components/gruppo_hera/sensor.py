@@ -70,8 +70,9 @@ SENSOR_DESCRIPTIONS = [
     GruppoHeraSensorDescription(
         key="average_daily",
         name="Average Daily Consumption",
-        native_unit_of_measurement="kWh/day",
+        native_unit_of_measurement="kWh",
         device_class=SensorDeviceClass.ENERGY,
+        state_class="total_increasing",
     ),
     GruppoHeraSensorDescription(
         key="last_bill_amount",

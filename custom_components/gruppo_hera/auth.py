@@ -75,16 +75,7 @@ def build_cookie_header(cookies: Dict[str, str]) -> str:
 
 
 def load_cookies() -> Optional[Dict]:
-    """Load session cookies from cache."""
-    import asyncio
-    
-    # Run blocking I/O in executor to avoid blocking event loop
-    loop = asyncio.get_event_loop()
-    return loop.run_in_executor(None, _load_cookies_sync)
-
-
-def _load_cookies_sync() -> Optional[Dict]:
-    """Synchronous version of load_cookies for executor."""
+    """Load session cookies from cache (synchronous for executor)."""
     try:
         if COOKIE_FILE.exists():
             with open(COOKIE_FILE, 'r') as f:
@@ -95,16 +86,7 @@ def _load_cookies_sync() -> Optional[Dict]:
 
 
 def save_cookies(cookies: Dict):
-    """Save session cookies to cache."""
-    import asyncio
-    
-    # Run blocking I/O in executor to avoid blocking event loop
-    loop = asyncio.get_event_loop()
-    loop.run_in_executor(None, _save_cookies_sync, cookies)
-
-
-def _save_cookies_sync(cookies: Dict):
-    """Synchronous version of save_cookies for executor."""
+    """Save session cookies to cache (synchronous for executor)."""
     with open(COOKIE_FILE, 'w') as f:
         json.dump(cookies, f, indent=2)
 

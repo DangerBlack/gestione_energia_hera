@@ -92,9 +92,13 @@ class GruppoHeraDataUpdateCoordinator(DataUpdateCoordinator):
         """Fetch data from Gruppo Hera API."""
         try:
             # Always perform fresh login (session expires after ~1 hour)
-            # This is more reliable than trying to reuse expired sessions
+            # Run all blocking operations in executor
             _LOGGER.info("Performing authentication...")
-            await login(self.email, self.password)
+            
+            # Login in executor (blocking HTTP requests + file I/O)
+            cookies = await self.hass.async_add_executor_job(
+                lambda: asyncio.run(login(self.email, self.password))
+            )
             _LOGGER.info("Authentication successful")
             
             # Fetch all data in parallel using executor for sync calls
