@@ -15,6 +15,7 @@ from .const import (
     CONF_EMAIL,
     CONF_PASSWORD,
     DEFAULT_SCAN_INTERVAL,
+    STARTUP_DELAY_MAX,
 )
 from .auth import login, logout, load_cookies
 from .api import get_contracts, get_bills, get_usage
@@ -35,6 +36,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     # Create coordinator
     coordinator = GruppoHeraDataUpdateCoordinator(hass, entry)
+    
+    # Add random delay on first refresh to spread API load across time
+    # This prevents all customers from hitting the API simultaneously after Watchtower updates
+    import random
+    startup_delay = random.randint(0, STARTUP_DELAY_MAX)
+    if startup_delay > 0:
+        _LOGGER.info(f"Waiting {startup_delay}s before first update (to spread API load)")
+        await asyncio.sleep(startup_delay)
+    
     await coordinator.async_config_entry_first_refresh()
     
     hass.data[DOMAIN][entry.entry_id] = coordinator
