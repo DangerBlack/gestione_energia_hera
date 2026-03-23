@@ -93,19 +93,22 @@ class GruppoHeraDataUpdateCoordinator(DataUpdateCoordinator):
         """Fetch data from Gruppo Hera API."""
         try:
             # Always perform fresh login (session expires after ~1 hour)
-            # Run all blocking operations in executor
             _LOGGER.info("Performing authentication...")
             
-            # Login in executor (blocking HTTP requests + file I/O)
+            # Login (blocking HTTP requests in _authenticate_sync) - run in executor
+            from .auth import login
             cookies = await self.hass.async_add_executor_job(
-                lambda: asyncio.run(login(self.email, self.password))
+                _do_login, self.email, self.password
             )
             _LOGGER.info("Authentication successful")
             
-            # Fetch all data in parallel using executor for sync calls
-            contracts, bills = await self.hass.async_add_executor_job(
-                self._fetch_contracts_and_bills_sync
-            )
+            # Fetch all data using async aiohttp calls directly
+            from .api import get_contracts, get_bills, get_usage
+            
+            # Fetch contracts and bills in parallel
+            contracts_task = get_contracts()
+            bills_task = get_bills()
+            contracts, bills = await asyncio.gather(contracts_task, bills_task)
             
             # Fetch usage for each contract
             usage_data = {}
@@ -113,9 +116,7 @@ class GruppoHeraDataUpdateCoordinator(DataUpdateCoordinator):
                 contract_id = contract.get("id")
                 if contract_id:
                     try:
-                        usage = await self.hass.async_add_executor_job(
-                            self._fetch_usage_sync, contract_id
-                        )
+                        usage = await get_usage(contract_id, page_number=0, page_size=10)
                         usage_data[contract_id] = usage
                     except Exception as err:
                         _LOGGER.warning(f"Failed to fetch usage for {contract_id}: {err}")
@@ -132,46 +133,15 @@ class GruppoHeraDataUpdateCoordinator(DataUpdateCoordinator):
                 raise ConfigEntryAuthFailed(f"Authentication failed: {err}")
             raise UpdateFailed(f"Data fetch error: {err}")
 
-    def _fetch_contracts_and_bills_sync(self):
-        """Fetch contracts and bills using the sync API wrapper."""
-        # Import here to avoid circular imports
-        from .api import get_contracts, get_bills
-        
-        # These are async functions, so we need to run them
-        # Since we're in an executor, we can't use async/await directly
-        # Instead, we use the sync wrappers or run in a new loop
-        import asyncio
-        
-        async def fetch():
-            contracts = await get_contracts()
-            bills = await get_bills()
-            return contracts, bills
-        
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            return loop.run_until_complete(fetch())
-        finally:
-            loop.close()
 
-    def _fetch_usage_sync(self, contract_id: str):
-        """Fetch usage for a specific contract."""
-        from .api import get_usage
-        
-        import asyncio
-        
-        async def fetch():
-            return await get_usage(contract_id, page_number=0, page_size=10)
-        
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            return loop.run_until_complete(fetch())
-        finally:
-            loop.close()
-
-    async def _async_ensure_authenticated(self):
-        """Deprecated: Always perform fresh login instead."""
-        # This method is no longer used - we always do full login
-        # Session expires after ~1 hour, so reusing cached sessions is unreliable
-        pass
+def _do_login(email: str, password: str) -> dict:
+    """Synchronous login wrapper - runs in executor thread."""
+    from .auth import _authenticate_sync, save_cookies
+    
+    # Call the synchronous auth function directly (no asyncio.run needed)
+    cookies = _authenticate_sync(email, password)
+    
+    # Save cookies (also synchronous)
+    save_cookies(cookies)
+    
+    return cookies

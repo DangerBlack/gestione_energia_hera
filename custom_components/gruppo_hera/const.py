@@ -11,7 +11,7 @@ CONF_CONTRACT_IDS = "contract_ids"
 
 # Default values
 DEFAULT_SCAN_INTERVAL = 86400  # 1 day in seconds (data changes rarely)
-STARTUP_DELAY_MAX = 3600  # Max random delay on startup (1 hour) to spread API load
+STARTUP_DELAY_MAX = 0  # Disabled - was causing long initialization times
 
 # Sensor types
 SENSOR_TYPES = {
