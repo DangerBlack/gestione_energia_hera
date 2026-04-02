@@ -30,6 +30,8 @@ _COOKIE_FILE: Path = Path(__file__).parent / ".session-cookies.json"
 
 # Held in memory only — never written to disk
 _access_token: Optional[str] = None
+# Full cookie dict cached in memory to avoid blocking disk reads in the event loop
+_cached_cookies: Optional[Dict] = None
 
 
 def configure_storage(config_dir: str) -> None:
@@ -90,14 +92,24 @@ def build_cookie_header(cookies: Dict[str, str]) -> str:
 
 
 def load_cookies() -> Optional[Dict]:
-    """Load session cookies from cache (synchronous for executor)."""
+    """Return session cookies, preferring the in-memory cache.
+
+    After the first successful auth, _cached_cookies is always populated so
+    this function returns without any disk I/O, keeping the event loop free.
+    The disk fallback is only reached if called before the first auth cycle
+    (e.g. during config-flow validation) and runs in an executor in that path.
+    """
+    global _cached_cookies
+    if _cached_cookies is not None:
+        return dict(_cached_cookies)
+    # Disk fallback — should only be reached outside normal HA operation
     try:
         if _COOKIE_FILE.exists():
             with open(_COOKIE_FILE, 'r') as f:
                 cookies = json.load(f)
-            # Re-attach the in-memory token so API calls have it available
             if _access_token:
                 cookies['accessToken'] = _access_token
+            _cached_cookies = dict(cookies)
             return cookies
     except Exception as e:
         _LOGGER.error(f"Error loading cookies: {e}")
@@ -105,21 +117,25 @@ def load_cookies() -> Optional[Dict]:
 
 
 def save_cookies(cookies: Dict):
-    """Save session cookies to cache (synchronous for executor).
+    """Persist session cookies.
 
     The access token is kept in memory only and never written to disk.
+    The full cookie dict (including token) is cached in memory so subsequent
+    load_cookies() calls never touch the filesystem.
     """
-    global _access_token
+    global _access_token, _cached_cookies
     _access_token = cookies.get('accessToken')
+    _cached_cookies = dict(cookies)
     on_disk = {k: v for k, v in cookies.items() if k != 'accessToken'}
     with open(_COOKIE_FILE, 'w') as f:
         json.dump(on_disk, f, indent=2)
 
 
 def clear_cookies():
-    """Clear cached cookies."""
-    global _access_token
+    """Clear cached cookies from memory and disk."""
+    global _access_token, _cached_cookies
     _access_token = None
+    _cached_cookies = None
     if _COOKIE_FILE.exists():
         _COOKIE_FILE.unlink()
 
