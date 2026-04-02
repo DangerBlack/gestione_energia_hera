@@ -23,7 +23,18 @@ import logging
 
 _LOGGER = logging.getLogger(__name__)
 
-COOKIE_FILE = Path(__file__).parent / ".session-cookies.json"
+# Mutable so it can be pointed at the HA config directory at runtime.
+# Default fallback is only used outside of HA (e.g. CLI / tests).
+_COOKIE_FILE: Path = Path(__file__).parent / ".session-cookies.json"
+
+
+def configure_storage(config_dir: str) -> None:
+    """Set the cookie file path to the HA config directory.
+
+    Must be called from async_setup_entry before any auth operations.
+    """
+    global _COOKIE_FILE
+    _COOKIE_FILE = Path(config_dir) / ".gruppo_hera_session.json"
 
 # Azure AD B2C Configuration
 CLIENT_ID = "40c94bb1-2d83-4ccc-8c72-fde8ad15ed24"
@@ -77,8 +88,8 @@ def build_cookie_header(cookies: Dict[str, str]) -> str:
 def load_cookies() -> Optional[Dict]:
     """Load session cookies from cache (synchronous for executor)."""
     try:
-        if COOKIE_FILE.exists():
-            with open(COOKIE_FILE, 'r') as f:
+        if _COOKIE_FILE.exists():
+            with open(_COOKIE_FILE, 'r') as f:
                 return json.load(f)
     except Exception as e:
         _LOGGER.error(f"Error loading cookies: {e}")
@@ -87,14 +98,14 @@ def load_cookies() -> Optional[Dict]:
 
 def save_cookies(cookies: Dict):
     """Save session cookies to cache (synchronous for executor)."""
-    with open(COOKIE_FILE, 'w') as f:
+    with open(_COOKIE_FILE, 'w') as f:
         json.dump(cookies, f, indent=2)
 
 
 def clear_cookies():
     """Clear cached cookies."""
-    if COOKIE_FILE.exists():
-        COOKIE_FILE.unlink()
+    if _COOKIE_FILE.exists():
+        _COOKIE_FILE.unlink()
 
 
 def get_cookie_header() -> Optional[str]:

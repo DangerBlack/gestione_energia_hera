@@ -19,7 +19,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     STARTUP_DELAY_MAX,
 )
-from .auth import login, logout, load_cookies
+from .auth import login, logout, load_cookies, configure_storage
 from .api import get_contracts, get_bills, get_usage
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,7 +35,10 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Gruppo Hera from a config entry."""
-    
+
+    # Point cookie storage at the HA config directory (safe across updates)
+    configure_storage(hass.config.config_dir)
+
     # Create coordinator
     coordinator = GruppoHeraDataUpdateCoordinator(hass, entry)
     
