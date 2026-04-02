@@ -39,6 +39,6 @@ node_modules/
 .DS_Store
 Thumbs.db
 
-# Test files
-test_*.py
+# Root-level integration test scripts (require real credentials via .env)
+/test_*.py
 venv_test/
