@@ -72,7 +72,6 @@ SENSOR_DESCRIPTIONS = [
         key="average_daily",
         name="Average Daily Consumption",
         native_unit_of_measurement="kWh",
-        device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.MEASUREMENT,
     ),
     GruppoHeraSensorDescription(

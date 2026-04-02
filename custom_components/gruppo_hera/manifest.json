@@ -7,5 +7,6 @@
   "dependencies": [],
   "codeowners": ["@DangerBlack"],
   "config_flow": true,
+  "iot_class": "cloud_polling",
   "requirements": ["requests>=2.31.0"]
 }
