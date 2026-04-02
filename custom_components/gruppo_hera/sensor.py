@@ -18,6 +18,17 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, MANUFACTURER
 
+# Common date field names returned by the Hera bills API, in priority order
+_BILL_DATE_FIELDS = ("date", "issueDate", "dueDate", "billDate", "created")
+
+
+def _latest_bill(bills: list) -> dict:
+    """Return the most recent bill by sorting on the first recognised date field."""
+    for field in _BILL_DATE_FIELDS:
+        if bills and field in bills[0]:
+            return max(bills, key=lambda b: b.get(field, ""))
+    return bills[0]
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -161,7 +172,7 @@ async def async_setup_entry(
     # Add last bill sensor (only once)
     bills = coordinator.data.get("bills", [])
     if bills:
-        latest_bill = bills[0]
+        latest_bill = _latest_bill(bills)
         sensors.append(
             GruppoHeraSensor(
                 coordinator,
@@ -243,7 +254,7 @@ class GruppoHeraSensor(CoordinatorEntity, SensorEntity):
         if self.entity_description.key == "last_bill_amount":
             bills = self.coordinator.data.get("bills", [])
             if bills:
-                return bills[0].get("amount", 0)
+                return _latest_bill(bills).get("amount", 0)
         
         return self._attr_native_value
 
