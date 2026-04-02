@@ -283,7 +283,7 @@ def _authenticate_sync(email: str, password: str) -> Dict:
     _LOGGER.info("  Got redirect location")
     
     # Step 4: Exchange code for token
-    _LOGGER.info("Step 3: Exchanging code for token...")
+    _LOGGER.info("Step 4: Exchanging code for token...")
     
     hash_idx = location.find('#')
     if hash_idx == -1:
@@ -329,7 +329,7 @@ def _authenticate_sync(email: str, password: str) -> Dict:
     cookies['accessToken'] = token_data['access_token']
     
     # Step 5: Establish session with servizionline
-    _LOGGER.info("Step 4: Establishing session with servizionline...")
+    _LOGGER.info("Step 5: Establishing session with servizionline...")
     
     resp = session.get(
         callback_url,
@@ -346,8 +346,8 @@ def _authenticate_sync(email: str, password: str) -> Dict:
     session_cookies = {cookie.name: cookie.value for cookie in session.cookies}
     cookies.update(session_cookies)
     
-    print(f"  Response URL: {resp.url}")
-    print(f"  Cookies received: {list(cookies.keys())}")
+    _LOGGER.debug("  Response URL: %s", resp.url)
+    _LOGGER.debug("  Cookies received: %s", list(cookies.keys()))
     
     has_session = cookies.get('profile') or any(k.startswith('x-ms-cpim-sso') for k in cookies.keys())
     
@@ -366,7 +366,7 @@ async def authenticate_with_b2c(email: str, password: str) -> Dict:
     Returns session cookies.
     """
     # Run synchronous requests in thread pool
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     cookies = await loop.run_in_executor(None, _authenticate_sync, email, password)
     return cookies
 

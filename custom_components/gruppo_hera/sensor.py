@@ -9,6 +9,7 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorEntityDescription,
     SensorDeviceClass,
+    SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -33,14 +34,14 @@ SENSOR_DESCRIPTIONS = [
         name="Total Consumption",
         native_unit_of_measurement="kWh",
         device_class=SensorDeviceClass.ENERGY,
-        state_class="total_increasing",
+        state_class=SensorStateClass.TOTAL_INCREASING,
     ),
     GruppoHeraSensorDescription(
         key="consumption_f0",
         name="Consumption F0",
         native_unit_of_measurement="kWh",
         device_class=SensorDeviceClass.ENERGY,
-        state_class="total_increasing",
+        state_class=SensorStateClass.TOTAL_INCREASING,
         band="F0",
     ),
     GruppoHeraSensorDescription(
@@ -48,7 +49,7 @@ SENSOR_DESCRIPTIONS = [
         name="Consumption F1",
         native_unit_of_measurement="kWh",
         device_class=SensorDeviceClass.ENERGY,
-        state_class="total_increasing",
+        state_class=SensorStateClass.TOTAL_INCREASING,
         band="F1",
     ),
     GruppoHeraSensorDescription(
@@ -56,7 +57,7 @@ SENSOR_DESCRIPTIONS = [
         name="Consumption F2",
         native_unit_of_measurement="kWh",
         device_class=SensorDeviceClass.ENERGY,
-        state_class="total_increasing",
+        state_class=SensorStateClass.TOTAL_INCREASING,
         band="F2",
     ),
     GruppoHeraSensorDescription(
@@ -64,7 +65,7 @@ SENSOR_DESCRIPTIONS = [
         name="Consumption F3",
         native_unit_of_measurement="kWh",
         device_class=SensorDeviceClass.ENERGY,
-        state_class="total_increasing",
+        state_class=SensorStateClass.TOTAL_INCREASING,
         band="F3",
     ),
     GruppoHeraSensorDescription(
@@ -72,12 +73,12 @@ SENSOR_DESCRIPTIONS = [
         name="Average Daily Consumption",
         native_unit_of_measurement="kWh",
         device_class=SensorDeviceClass.ENERGY,
-        state_class="total_increasing",
+        state_class=SensorStateClass.MEASUREMENT,
     ),
     GruppoHeraSensorDescription(
         key="last_bill_amount",
         name="Last Bill Amount",
-        native_unit_of_measurement="€",
+        native_unit_of_measurement="EUR",
         device_class=SensorDeviceClass.MONETARY,
     ),
 ]

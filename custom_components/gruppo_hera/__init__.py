@@ -3,7 +3,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import timedelta
+import random
+from datetime import datetime, timedelta
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
@@ -40,7 +41,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     
     # Add random delay on first refresh to spread API load across time
     # This prevents all customers from hitting the API simultaneously after Watchtower updates
-    import random
     startup_delay = random.randint(0, STARTUP_DELAY_MAX)
     if startup_delay > 0:
         _LOGGER.info(f"Waiting {startup_delay}s before first update (to spread API load)")
@@ -66,11 +66,10 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     return unload_ok
 
 
-async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
     """Remove a config entry."""
     # Clear cached cookies on removal
     await logout()
-    return True
 
 
 class GruppoHeraDataUpdateCoordinator(DataUpdateCoordinator):
@@ -82,11 +81,12 @@ class GruppoHeraDataUpdateCoordinator(DataUpdateCoordinator):
         self.email = config_entry.data.get(CONF_EMAIL, "")
         self.password = config_entry.data.get(CONF_PASSWORD, "")
         
+        scan_interval = config_entry.options.get("scan_interval", DEFAULT_SCAN_INTERVAL)
         super().__init__(
             hass,
             _LOGGER,
             name=DOMAIN,
-            update_interval=timedelta(seconds=DEFAULT_SCAN_INTERVAL),
+            update_interval=timedelta(seconds=scan_interval),
         )
 
     async def _async_update_data(self) -> dict[str, Any]:
@@ -96,15 +96,12 @@ class GruppoHeraDataUpdateCoordinator(DataUpdateCoordinator):
             _LOGGER.info("Performing authentication...")
             
             # Login (blocking HTTP requests in _authenticate_sync) - run in executor
-            from .auth import login
             cookies = await self.hass.async_add_executor_job(
                 _do_login, self.email, self.password
             )
             _LOGGER.info("Authentication successful")
             
             # Fetch all data using async aiohttp calls directly
-            from .api import get_contracts, get_bills, get_usage
-            
             # Fetch contracts and bills in parallel
             contracts_task = get_contracts()
             bills_task = get_bills()
@@ -125,7 +122,7 @@ class GruppoHeraDataUpdateCoordinator(DataUpdateCoordinator):
                 "contracts": contracts,
                 "bills": bills,
                 "usage": usage_data,
-                "last_update": self.hass.data.get("now"),
+                "last_update": datetime.now(),
             }
             
         except Exception as err:
