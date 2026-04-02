@@ -42,6 +42,10 @@ class GruppoHeraConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self.email = user_input[CONF_EMAIL]
             self.password = user_input[CONF_PASSWORD]
 
+            # Prevent duplicate entries for the same account
+            await self.async_set_unique_id(self.email.lower())
+            self._abort_if_unique_id_configured()
+
             # Test authentication
             try:
                 # Try to login with provided credentials
