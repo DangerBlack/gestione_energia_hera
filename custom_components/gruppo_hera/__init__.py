@@ -19,7 +19,7 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     STARTUP_DELAY_MAX,
 )
-from .auth import login, logout, load_cookies, configure_storage
+from .auth import login, logout, load_cookies, configure_storage, _authenticate_sync, save_cookies
 from .api import get_contracts, get_bills, get_usage
 
 _LOGGER = logging.getLogger(__name__)
@@ -144,12 +144,6 @@ class GruppoHeraDataUpdateCoordinator(DataUpdateCoordinator):
 
 def _do_login(email: str, password: str) -> dict:
     """Synchronous login wrapper - runs in executor thread."""
-    from .auth import _authenticate_sync, save_cookies
-    
-    # Call the synchronous auth function directly (no asyncio.run needed)
     cookies = _authenticate_sync(email, password)
-    
-    # Save cookies (also synchronous)
     save_cookies(cookies)
-    
     return cookies

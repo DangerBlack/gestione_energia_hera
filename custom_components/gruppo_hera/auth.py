@@ -55,37 +55,6 @@ def generate_random_string(length: int) -> str:
     return ''.join(secrets.choice(chars) for _ in range(length))
 
 
-def extract_cookies(set_cookie_header: Optional[str]) -> Dict[str, str]:
-    """Extract cookies from Set-Cookie header using regex."""
-    import re
-    if not set_cookie_header:
-        return {}
-    
-    cookies = {}
-    
-    # Define patterns with explicit cookie names
-    patterns = {
-        'x-ms-cpim-csrf': r'x-ms-cpim-csrf=([^;]+)',
-        'x-ms-cpim-trans': r'x-ms-cpim-trans=([^;]+)',
-        'profile': r'profile=([^;]+)',
-        'session': r'session=([^;]+)',
-        'accessToken': r'accessToken=([^;]+)',
-    }
-    
-    # Handle x-ms-cpim-cache separately (has variable name)
-    cache_match = re.search(r'(x-ms-cpim-cache[^=]+)=([^;]+)', set_cookie_header)
-    if cache_match:
-        cookies[cache_match.group(1)] = cache_match.group(2)
-    
-    # Extract other cookies
-    for cookie_name, pattern in patterns.items():
-        match = re.search(pattern, set_cookie_header)
-        if match:
-            cookies[cookie_name] = match.group(1)
-    
-    return cookies
-
-
 def build_cookie_header(cookies: Dict[str, str]) -> str:
     """Build Cookie header from cookies dict."""
     return '; '.join(f"{k}={v}" for k, v in cookies.items())
@@ -402,36 +371,23 @@ def _authenticate_sync(email: str, password: str) -> Dict:
     return cookies
 
 
-async def authenticate_with_b2c(email: str, password: str) -> Dict:
-    """
-    Full Azure AD B2C OAuth flow with cookies.
-    Runs synchronous requests in a thread pool to avoid blocking.
-    Returns session cookies.
-    """
-    # Run synchronous requests in thread pool
-    loop = asyncio.get_running_loop()
-    cookies = await loop.run_in_executor(None, _authenticate_sync, email, password)
-    return cookies
-
-
 async def login(email: str, password: str) -> Dict:
-    """
-    Login with email/password - returns session cookies.
+    """Login with email/password - returns session cookies.
+
     Always performs full authentication (no cached session reuse).
     Session tokens expire after ~1 hour, so fresh login is more reliable.
     """
-    # Always perform fresh login - cached sessions expire after ~1 hour
-    cookies = await authenticate_with_b2c(email, password)
-    
-    # Check for session cookie
+    loop = asyncio.get_running_loop()
+    cookies = await loop.run_in_executor(None, _authenticate_sync, email, password)
+
     has_session = cookies.get('profile') or any(k.startswith('x-ms-cpim-sso') for k in cookies.keys())
-    
+
     if has_session:
         save_cookies(cookies)
         _LOGGER.debug("Login successful! Session cached.")
     else:
         raise Exception("Login failed - no session cookie received")
-    
+
     return cookies
 
 
@@ -439,9 +395,3 @@ async def logout():
     """Clear stored authentication session."""
     clear_cookies()
     _LOGGER.info("Logged out. Session cleared.")
-
-
-# Async wrapper for sync functions
-async def get_cookie_header_async() -> Optional[str]:
-    """Get cookie header string for API calls."""
-    return get_cookie_header()
