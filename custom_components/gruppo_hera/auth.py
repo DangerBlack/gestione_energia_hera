@@ -9,7 +9,7 @@ import asyncio
 import base64
 import hashlib
 import json
-import random
+import secrets
 import string
 from pathlib import Path
 from typing import Dict, Optional
@@ -50,9 +50,9 @@ SERVIZIONLINE_BASE = "https://servizionline.gruppohera.it/api"
 
 
 def generate_random_string(length: int) -> str:
-    """Generate random alphanumeric string."""
+    """Generate cryptographically secure random alphanumeric string."""
     chars = string.ascii_lowercase + string.ascii_uppercase + string.digits
-    return ''.join(random.choice(chars) for _ in range(length))
+    return ''.join(secrets.choice(chars) for _ in range(length))
 
 
 def extract_cookies(set_cookie_header: Optional[str]) -> Dict[str, str]:
