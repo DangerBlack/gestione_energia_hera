@@ -28,6 +28,10 @@ _LOGGER = logging.getLogger(__name__)
 _COOKIE_FILE: Path = Path(__file__).parent / ".session-cookies.json"
 
 
+# Held in memory only — never written to disk
+_access_token: Optional[str] = None
+
+
 def configure_storage(config_dir: str) -> None:
     """Set the cookie file path to the HA config directory.
 
@@ -90,20 +94,32 @@ def load_cookies() -> Optional[Dict]:
     try:
         if _COOKIE_FILE.exists():
             with open(_COOKIE_FILE, 'r') as f:
-                return json.load(f)
+                cookies = json.load(f)
+            # Re-attach the in-memory token so API calls have it available
+            if _access_token:
+                cookies['accessToken'] = _access_token
+            return cookies
     except Exception as e:
         _LOGGER.error(f"Error loading cookies: {e}")
     return None
 
 
 def save_cookies(cookies: Dict):
-    """Save session cookies to cache (synchronous for executor)."""
+    """Save session cookies to cache (synchronous for executor).
+
+    The access token is kept in memory only and never written to disk.
+    """
+    global _access_token
+    _access_token = cookies.get('accessToken')
+    on_disk = {k: v for k, v in cookies.items() if k != 'accessToken'}
     with open(_COOKIE_FILE, 'w') as f:
-        json.dump(cookies, f, indent=2)
+        json.dump(on_disk, f, indent=2)
 
 
 def clear_cookies():
     """Clear cached cookies."""
+    global _access_token
+    _access_token = None
     if _COOKIE_FILE.exists():
         _COOKIE_FILE.unlink()
 
